@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  agent:
+    build: .
+    container_name: agentic-ai
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./knowledge:/app/knowledge
+      - ./logs:/app/logs
+    stdin_open: true
+    tty: true
+    command: python agent.py
+
+  multi-agent:
+    build: .
+    container_name: multi-agent
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: python multi_agent.py
+    profiles:
+      - multi
+
+  reasoning:
+    build: .
+    container_name: reasoning-agent
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: python reasoning_agents.py
+    profiles:
+      - reasoning
+
+  rag:
+    build: .
+    container_name: rag-agent
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./knowledge:/app/knowledge
+    command: python rag_agent.py
+    profiles:
+      - rag
+
+  planning:
+    build: .
+    container_name: planning-agent
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: python planning_agent.py
+    profiles:
+      - planning
