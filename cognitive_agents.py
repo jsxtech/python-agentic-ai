@@ -1,9 +1,9 @@
-import anthropic
+from config import api_call_with_retry, get_client, extract_json_object
 import json
 from datetime import datetime
 from typing import List, Dict
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class WorldModelAgent:
     """Agent that builds and maintains a world model"""
@@ -19,17 +19,17 @@ New observation: {observation}
 
 Update the world state. Return JSON with updated state:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
         
         try:
             result = response.content[0].text
-            start = result.find('{')
-            end = result.rfind('}') + 1
-            self.world_state = json.loads(result[start:end])
+            parsed = extract_json_object(result)
+            if parsed is not None:
+                self.world_state = parsed
         except:
             pass
         
@@ -43,8 +43,8 @@ Proposed action: {action}
 
 Predict the outcome and new world state:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -58,8 +58,8 @@ Goal: {goal}
 
 Create a plan considering the current world state:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -91,8 +91,8 @@ class GoalOrientedAgent:
 Which goal should be pursued next? Consider priority and dependencies.
 Respond with the goal text:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=256,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -111,8 +111,8 @@ Respond with the goal text:"""
         
         prompt = f"Create an action plan to achieve: {goal['goal']}"
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -142,20 +142,24 @@ class EmotionalAgent:
 Event: {event}
 
 How would this event affect emotional state? Return JSON with updated valence, arousal, dominance (0-1):"""
-        
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+
+        response = api_call_with_retry(
+            client,
             max_tokens=256,
             messages=[{"role": "user", "content": prompt}]
         )
-        
-        try:
-            result = response.content[0].text
-            start = result.find('{')
-            end = result.rfind('}') + 1
-            self.emotional_state = json.loads(result[start:end])
-        except:
-            pass
+
+        result = response.content[0].text
+        parsed = extract_json_object(result)
+        if parsed is not None and all(k in parsed for k in ("valence", "arousal", "dominance")):
+            try:
+                self.emotional_state = {
+                    "valence": max(0, min(1, float(parsed["valence"]))),
+                    "arousal": max(0, min(1, float(parsed["arousal"]))),
+                    "dominance": max(0, min(1, float(parsed["dominance"]))),
+                }
+            except (ValueError, TypeError):
+                pass  # Keep existing emotional state if values aren't numeric
         
         return self.emotional_state
     
@@ -168,8 +172,8 @@ Situation: {situation}
 
 Respond in a way that reflects your emotional state:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -207,8 +211,8 @@ Format:
 DECISION: [chosen option]
 REASONING: [detailed explanation]"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": decision_prompt}]
         )
@@ -228,8 +232,8 @@ Provide counterfactual explanations:
 - What factors were most critical?
 - What could have changed the outcome?"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
