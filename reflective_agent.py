@@ -1,8 +1,8 @@
-import anthropic
 import json
 from datetime import datetime
+from config import api_call_with_retry, get_client
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class ReflectiveAgent:
     """Agent that reflects on its actions and learns from mistakes"""
@@ -13,8 +13,8 @@ class ReflectiveAgent:
     
     def act(self, task):
         # Initial attempt
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": task}]
         )
@@ -32,8 +32,8 @@ Reflect on your response:
 
 Provide a JSON response with: {{strengths: [], weaknesses: [], improvements: []}}"""
         
-        reflection = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        reflection = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": reflection_prompt}]
         )
@@ -45,8 +45,8 @@ Reflection: {reflection.content[0].text}
 
 Now provide an improved response:"""
         
-        improved = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        improved = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": improve_prompt}]
         )
