@@ -1,9 +1,9 @@
-import anthropic
+from config import api_call_with_retry, get_client
 import json
 from datetime import datetime
 from typing import List, Dict
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class AgentTesting:
     """Testing framework for agents"""
@@ -52,7 +52,7 @@ class AgentTesting:
             "total": len(self.test_cases),
             "passed": passed,
             "failed": failed,
-            "pass_rate": f"{(passed/len(self.test_cases)*100):.1f}%",
+            "pass_rate": f"{(passed/len(self.test_cases)*100):.1f}%" if self.test_cases else "N/A",
             "results": self.results
         }
 
@@ -208,8 +208,8 @@ class AgentABTest:
 if __name__ == "__main__":
     # Test agent function
     def test_agent(input_text):
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=256,
             messages=[{"role": "user", "content": input_text}]
         )
