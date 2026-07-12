@@ -279,6 +279,7 @@ python planning_agent.py       # Autonomous planning
 
 ```
 python-agentic-ai/
+├── config.py                   # Shared configuration, utilities, retry logic
 ├── agent.py                    # Core interactive agent
 ├── multi_agent.py              # Multi-agent collaboration
 ├── rag_agent.py                # RAG with knowledge base
