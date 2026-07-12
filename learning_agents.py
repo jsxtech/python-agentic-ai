@@ -1,8 +1,8 @@
-import anthropic
 import json
 from datetime import datetime
+from config import api_call_with_retry, get_client
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class AgentWithMemory:
     """Agent with episodic and semantic memory"""
@@ -58,8 +58,8 @@ Semantic knowledge:
 
 Use your memory to inform your response:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -89,8 +89,8 @@ Execute this task using the specified approach:"""
         
         start = datetime.now()
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -105,8 +105,8 @@ Response: {result}
 
 Provide just a number:"""
         
-        eval_response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        eval_response = api_call_with_retry(
+            client,
             max_tokens=10,
             messages=[{"role": "user", "content": eval_prompt}]
         )
@@ -130,25 +130,27 @@ Provide just a number:"""
     
     def learn_best_strategy(self, task_type):
         """Determine which strategy works best for a task type"""
-        
+
         strategies = [
             ("analytical", "Break down into logical steps"),
             ("creative", "Think outside the box and explore novel approaches"),
             ("systematic", "Follow a structured methodology")
         ]
-        
+
         print(f"🧪 Testing strategies for: {task_type}\n")
-        
+
+        # Track scores from this evaluation only
+        current_scores = {}
         for name, approach in strategies:
             result, score = self.try_strategy(task_type, name, approach)
+            current_scores[name] = score
             print(f"{name.capitalize()}: Score {score}/10")
-        
-        # Find best strategy
-        best = max(self.performance.items(), 
-                   key=lambda x: sum(p["score"] for p in x[1]) / len(x[1]))
-        
-        print(f"\n🏆 Best strategy: {best[0]}")
-        return best[0]
+
+        # Find best strategy for this task type (only from current run)
+        best_name = max(current_scores, key=current_scores.get)
+
+        print(f"\n🏆 Best strategy: {best_name}")
+        return best_name
 
 if __name__ == "__main__":
     print("=== Agent with Memory ===")
