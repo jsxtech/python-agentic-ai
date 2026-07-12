@@ -1,8 +1,8 @@
-import anthropic
+from config import api_call_with_retry, get_client
 import json
 from datetime import datetime
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class EthicalAgent:
     """Agent with ethical reasoning capabilities"""
@@ -31,8 +31,8 @@ Evaluate this action ethically:
 
 Provide structured analysis:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -54,8 +54,8 @@ Values: {self.values}
 
 Which option is more ethical? Explain reasoning:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -81,8 +81,8 @@ Assess safety risks:
 
 Return JSON: {{"risk_level": "...", "hazards": [], "mitigations": []}}"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -102,8 +102,8 @@ Create a comprehensive safety plan:
 3. Emergency protocols
 4. Post-task verification"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -125,8 +125,8 @@ Categories: {self.pii_categories}
 
 Return JSON: {{"contains_pii": true/false, "found": [], "risk_level": "low/medium/high"}}"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -140,8 +140,8 @@ Return JSON: {{"contains_pii": true/false, "found": [], "risk_level": "low/mediu
 Replace all PII with placeholders like [NAME], [EMAIL], etc.
 Preserve the meaning while protecting privacy:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -155,8 +155,8 @@ User permissions: {user_permissions}
 
 Does this usage comply with user consent? Explain:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -185,8 +185,8 @@ For each bias type found:
 
 Return structured analysis:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -205,8 +205,8 @@ Rewrite to remove biases while preserving meaning:
 - Avoid stereotypes
 - Ensure fairness"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
