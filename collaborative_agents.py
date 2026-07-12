@@ -1,8 +1,8 @@
-import anthropic
+from config import api_call_with_retry, get_client, extract_json_object
 import json
 from typing import List, Dict
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class CriticAgent:
     """Agent that critiques and validates outputs"""
@@ -19,8 +19,8 @@ Critique this output:
 
 Provide JSON: {{"score": 0-10, "issues": [], "suggestions": []}}"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -46,8 +46,8 @@ class AgentWithCritic:
             else:
                 prompt = f"{task}\n\nPrevious attempt: {current_output}\nCritique: {critique}\n\nImprove based on feedback:"
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            response = api_call_with_retry(
+                client,
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -59,10 +59,12 @@ class AgentWithCritic:
             critique = self.critic.critique(task, current_output)
             print(f"Critique: {critique[:150]}...\n")
             
-            # Check if good enough
-            if "score" in critique and any(str(x) in critique for x in range(8, 11)):
-                print("✅ Quality threshold met")
-                break
+            # Check if good enough (parse score numerically)
+            critique_data = extract_json_object(critique)
+            if critique_data and isinstance(critique_data.get("score"), (int, float)):
+                if critique_data["score"] >= 8:
+                    print("✅ Quality threshold met")
+                    break
         
         return current_output
 
@@ -78,8 +80,8 @@ class DebateAgent:
         for i in range(num_agents):
             prompt = f"Agent {i+1}: State your position on: {topic}"
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            response = api_call_with_retry(
+                client,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -104,8 +106,8 @@ Other positions:
 
 Respond to other positions and refine your argument:"""
                 
-                response = client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
+                response = api_call_with_retry(
+                    client,
                     max_tokens=512,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -124,8 +126,8 @@ Final positions:
 
 Synthesize the best insights from all positions:"""
         
-        final = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        final = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
@@ -147,8 +149,8 @@ class SocraticAgent:
 
 Ask a deep, probing question that challenges assumptions or explores implications:"""
             
-            q_response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            q_response = api_call_with_retry(
+                client,
                 max_tokens=256,
                 messages=[{"role": "user", "content": question_prompt}]
             )
@@ -162,8 +164,8 @@ Context: {current_understanding}
 
 Provide a thoughtful answer:"""
             
-            a_response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            a_response = api_call_with_retry(
+                client,
                 max_tokens=512,
                 messages=[{"role": "user", "content": answer_prompt}]
             )
