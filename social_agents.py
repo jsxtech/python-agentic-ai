@@ -1,9 +1,9 @@
-import anthropic
+from config import api_call_with_retry, get_client
 import json
 from datetime import datetime
 from typing import List, Dict, Any
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class NegotiationAgent:
     """Agent that negotiates with other agents"""
@@ -26,8 +26,8 @@ Their last position: {other_position}
 
 Make a proposal that moves toward agreement:"""
             
-            my_response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            my_response = api_call_with_retry(
+                client,
                 max_tokens=256,
                 messages=[{"role": "user", "content": my_prompt}]
             )
@@ -42,8 +42,8 @@ Their proposal: {my_position}
 
 Counter-propose or accept:"""
             
-            other_response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            other_response = api_call_with_retry(
+                client,
                 max_tokens=256,
                 messages=[{"role": "user", "content": other_prompt}]
             )
@@ -68,8 +68,8 @@ Learner's response: {learner_response}
 Assess understanding level (0-10) and identify gaps:
 Return JSON: {{"score": 0-10, "gaps": [], "strengths": []}}"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -86,8 +86,8 @@ Use:
 2. Example
 3. Practice question"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": explain_prompt}]
         )
@@ -98,8 +98,8 @@ Use:
         # Simulate learner response
         learner_prompt = f"You're a {learner_level} learning {topic}. Answer the practice question from the lesson."
         
-        learner_response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        learner_response = api_call_with_retry(
+            client,
             max_tokens=256,
             messages=[{"role": "user", "content": learner_prompt}]
         )
@@ -136,8 +136,8 @@ Available agents:
 
 Which agent is best suited? Respond with agent name:"""
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            response = api_call_with_retry(
+                client,
                 max_tokens=50,
                 messages=[{"role": "user", "content": assignment_prompt}]
             )
@@ -177,8 +177,8 @@ Analyze system health:
 
 Provide structured analysis:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
