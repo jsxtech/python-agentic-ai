@@ -1,8 +1,8 @@
-import anthropic
+from config import api_call_with_retry, get_client
 import json
 from datetime import datetime
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class EvolutionaryAgent:
     """Agent that evolves solutions through generations"""
@@ -15,8 +15,8 @@ class EvolutionaryAgent:
         for i in range(population_size):
             prompt = f"Generate a solution to: {problem}"
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            response = api_call_with_retry(
+                client,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -47,8 +47,8 @@ Parent 2: {parent2}
 
 Create a new solution by combining best elements from both parents and adding innovation:"""
                 
-                response = client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
+                response = api_call_with_retry(
+                    client,
                     max_tokens=512,
                     messages=[{"role": "user", "content": crossover_prompt}]
                 )
@@ -77,8 +77,8 @@ Rate this solution 0-10 based on:
 
 Respond with just a number:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=10,
             messages=[{"role": "user", "content": eval_prompt}]
         )
@@ -104,8 +104,8 @@ class CuriosityDrivenAgent:
             # Learn about current topic
             learn_prompt = f"Explain {current_topic} in 2-3 sentences:"
             
-            response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            response = api_call_with_retry(
+                client,
                 max_tokens=256,
                 messages=[{"role": "user", "content": learn_prompt}]
             )
@@ -121,8 +121,8 @@ What you know: {knowledge}
 
 What's the most interesting related topic to explore next? Respond with just the topic name:"""
             
-            next_response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+            next_response = api_call_with_retry(
+                client,
                 max_tokens=50,
                 messages=[{"role": "user", "content": curiosity_prompt}]
             )
@@ -156,8 +156,8 @@ What type of approach would work best? Choose one:
 
 Respond with just one word:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=10,
             messages=[{"role": "user", "content": context_prompt}]
         )
@@ -177,8 +177,8 @@ Strategy: {strategy}
 
 Solve this task using the specified strategy:"""
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
