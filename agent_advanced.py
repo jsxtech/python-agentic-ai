@@ -1,9 +1,8 @@
-import anthropic
+from config import api_call_with_retry, get_client, extract_json_object, extract_json_array
 import json
 from typing import List, Dict
-import asyncio
 
-client = anthropic.Anthropic()
+client = get_client()
 
 class AgentWorkflow:
     """Visual workflow builder for agents"""
@@ -40,8 +39,8 @@ class AgentWorkflow:
     def _execute_node(self, node: Dict, input_data: str) -> str:
         prompt = f"{node['config'].get('instruction', 'Process')}: {input_data}"
         
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = api_call_with_retry(
+            client,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -70,37 +69,31 @@ def sentiment_analysis(text: str) -> Dict:
     """Analyze sentiment of text"""
     prompt = f"Analyze sentiment (positive/negative/neutral) and score 0-10:\n{text}\nReturn JSON."
     
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+    response = api_call_with_retry(
+        client,
         max_tokens=256,
         messages=[{"role": "user", "content": prompt}]
     )
     
-    try:
-        text = response.content[0].text
-        start = text.find('{')
-        end = text.rfind('}') + 1
-        return json.loads(text[start:end])
-    except:
-        return {"sentiment": "neutral", "score": 5}
+    result = extract_json_object(response.content[0].text)
+    if result is not None:
+        return result
+    return {"sentiment": "neutral", "score": 5}
 
 def entity_extraction(text: str) -> List[Dict]:
     """Extract named entities"""
     prompt = f"Extract entities (person, org, location) from:\n{text}\nReturn JSON array."
     
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+    response = api_call_with_retry(
+        client,
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}]
     )
     
-    try:
-        text = response.content[0].text
-        start = text.find('[')
-        end = text.rfind(']') + 1
-        return json.loads(text[start:end])
-    except:
-        return []
+    result = extract_json_array(response.content[0].text)
+    if result is not None:
+        return result
+    return []
 
 def intent_classification(text: str) -> Dict:
     """Classify user intent"""
@@ -109,19 +102,16 @@ Text: {text}
 Categories: question, command, statement, request
 Return JSON: {{"intent": "...", "confidence": 0-1}}"""
     
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+    response = api_call_with_retry(
+        client,
         max_tokens=256,
         messages=[{"role": "user", "content": prompt}]
     )
     
-    try:
-        text = response.content[0].text
-        start = text.find('{')
-        end = text.rfind('}') + 1
-        return json.loads(text[start:end])
-    except:
-        return {"intent": "statement", "confidence": 0.5}
+    result = extract_json_object(response.content[0].text)
+    if result is not None:
+        return result
+    return {"intent": "statement", "confidence": 0.5}
 
 class AgentCache:
     """Cache agent responses for faster retrieval"""
