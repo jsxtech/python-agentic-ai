@@ -1,6 +1,6 @@
-import json
 from datetime import datetime
-from config import api_call_with_retry, get_client
+
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -19,7 +19,7 @@ class ReflectiveAgent:
             messages=[{"role": "user", "content": task}]
         )
         
-        initial_result = response.content[0].text
+        initial_result = first_text(response)
         
         # Self-reflection
         reflection_prompt = f"""Task: {task}
@@ -41,7 +41,7 @@ Provide a JSON response with: {{strengths: [], weaknesses: [], improvements: []}
         # Improved attempt based on reflection
         improve_prompt = f"""Task: {task}
 Previous attempt: {initial_result}
-Reflection: {reflection.content[0].text}
+Reflection: {first_text(reflection)}
 
 Now provide an improved response:"""
         
@@ -54,12 +54,12 @@ Now provide an improved response:"""
         self.experience.append({
             "task": task,
             "initial": initial_result,
-            "reflection": reflection.content[0].text,
-            "improved": improved.content[0].text,
+            "reflection": first_text(reflection),
+            "improved": first_text(improved),
             "timestamp": datetime.now().isoformat()
         })
         
-        return improved.content[0].text
+        return first_text(improved)
     
     def get_experience(self):
         return self.experience
