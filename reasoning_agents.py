@@ -1,3 +1,5 @@
+import re
+
 from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
@@ -149,18 +151,36 @@ ACTION: FINISH"""
                     print("\n✅ Task completed")
                     break
 
-                # Try to extract tool name and input
+                # Split the action into the tool token and its input, preserving
+                # the ORIGINAL case of the input (lowercasing only for matching).
+                lowered = action_part.lower()
+                raw_input = ""
+                if "with input" in lowered:
+                    idx = lowered.index("with input") + len("with input")
+                    tool_token = action_part[:lowered.index("with input")]
+                    raw_input = action_part[idx:].strip()
+                elif ":" in action_part:
+                    tool_token, raw_input = action_part.split(":", 1)
+                    raw_input = raw_input.strip()
+                else:
+                    tool_token = action_part
+
+                # Match the tool name on word boundaries against the tool token
+                # only (not the whole action text), so "search" no longer matches
+                # inside "research" and the first-listed tool doesn't win by
+                # accident.
+                token_lower = tool_token.lower()
                 for tool_name in available_tools:
-                    if tool_name in action_part.lower():
+                    if re.search(rf"\b{re.escape(tool_name.lower())}\b", token_lower):
                         action_name = tool_name
-                        # Extract input after "with input" or similar patterns
-                        if "with input" in action_part.lower():
-                            action_input = action_part.lower().split("with input")[-1].strip()
-                        elif ":" in action_part:
-                            action_input = action_part.split(":", 1)[-1].strip()
-                        else:
-                            action_input = action_part.replace(tool_name, "").strip()
+                        # If no explicit input delimiter was found, strip the
+                        # tool name out of the token as a fallback input.
+                        if not raw_input:
+                            raw_input = re.sub(
+                                rf"\b{re.escape(tool_name)}\b", "", tool_token, flags=re.IGNORECASE
+                            ).strip()
                         break
+                action_input = raw_input
 
                 # Execute the tool
                 if action_name and action_name in self.tool_functions:
