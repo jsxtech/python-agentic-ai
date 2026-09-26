@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 from config import api_call_with_retry, first_text, get_client
@@ -51,11 +52,28 @@ Counter-propose or accept:"""
             other_position = first_text(other_response)
             print(f"Their response: {other_position}\n")
             
-            if "accept" in other_position.lower():
+            if self._is_acceptance(other_position):
                 print("✅ Agreement reached!")
                 return my_position
         
         return "No agreement reached"
+
+    @staticmethod
+    def _is_acceptance(text):
+        """Detect a genuine acceptance, avoiding false positives.
+
+        Plain substring matching flags negations like "cannot accept" or
+        "unacceptable". We require an affirmative accept/agree/deal token that
+        is not part of a negated phrase.
+        """
+        lowered = text.lower()
+        if "unacceptable" in lowered:
+            return False
+        if re.search(r"\b(?:un|not|no|cannot|can't|won't|don't|cant|wont|dont)\s*accept", lowered):
+            return False
+        return bool(
+            re.search(r"\b(?:i accept|we accept|accepted|agree|agreed|it's a deal|deal!)\b", lowered)
+        )
 
 class TeachingAgent:
     """Agent that teaches concepts to learners"""
@@ -156,14 +174,21 @@ Which agent is best suited? Respond with agent name:"""
 class MonitoringAgent:
     """Agent that monitors system health and performance"""
     
-    def __init__(self):
+    def __init__(self, max_samples=1000, max_alerts=500):
         self.metrics = {}
         self.alerts = []
+        self.max_samples = max_samples
+        self.max_alerts = max_alerts
     
     def collect_metrics(self, metric_name, value):
         if metric_name not in self.metrics:
             self.metrics[metric_name] = []
-        self.metrics[metric_name].append({"value": value, "time": datetime.now().isoformat()})
+        series = self.metrics[metric_name]
+        series.append({"value": value, "time": datetime.now().isoformat()})
+        # Keep the series bounded (retain most recent samples) so a
+        # long-running monitor doesn't grow without limit.
+        if len(series) > self.max_samples:
+            del series[:-self.max_samples]
     
     def analyze_health(self):
         print("🔍 System Health Analysis\n")
@@ -195,13 +220,20 @@ Provide structured analysis:"""
         
         values = [m["value"] for m in self.metrics[metric_name]]
         recent = values[-1]
-        avg = sum(values[:-1]) / len(values[:-1])
-        
-        # Simple threshold-based detection
-        if abs(recent - avg) > avg * 0.5:
+        baseline = values[:-1]
+        avg = sum(baseline) / len(baseline)
+
+        # Threshold: 50% deviation from the baseline average, but with an
+        # absolute floor so a zero (or near-zero) baseline doesn't collapse the
+        # threshold to 0 and flag every nonzero reading.
+        spread = max(baseline) - min(baseline)
+        threshold = max(abs(avg) * 0.5, spread, 1.0)
+        if abs(recent - avg) > threshold:
             self.alerts.append(f"Anomaly detected in {metric_name}: {recent} vs avg {avg:.2f}")
+            if len(self.alerts) > self.max_alerts:
+                del self.alerts[:-self.max_alerts]
             return True
-        
+
         return False
 
 if __name__ == "__main__":
