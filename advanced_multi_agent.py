@@ -1,6 +1,4 @@
-import json
-
-from config import api_call_with_retry, get_client, extract_json_array
+from config import api_call_with_retry, extract_json_array, first_text, get_client
 
 client = get_client()
 
@@ -25,13 +23,10 @@ Format as JSON: [{{"id": 1, "subtask": "...", "priority": "high/medium/low"}}]""
             messages=[{"role": "user", "content": manager_prompt}]
         )
         
-        result = response.content[0].text
+        result = first_text(response)
         
-        try:
-            subtasks = extract_json_array(result)
-            if subtasks is None:
-                subtasks = [{"id": 1, "subtask": task, "priority": "high"}]
-        except:
+        subtasks = extract_json_array(result)
+        if subtasks is None:
             subtasks = [{"id": 1, "subtask": task, "priority": "high"}]
         
         print("👔 Manager: Task breakdown")
@@ -54,7 +49,7 @@ Format as JSON: [{{"id": 1, "subtask": "...", "priority": "high/medium/low"}}]""
             messages=[{"role": "user", "content": worker_prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def run(self, task):
         print(f"🎯 Main task: {task}\n")
@@ -85,8 +80,8 @@ Synthesize these results into a final output:"""
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
         
-        print(f"\n👔 Manager synthesis:\n{final.content[0].text}")
-        return final.content[0].text
+        print(f"\n👔 Manager synthesis:\n{first_text(final)}")
+        return first_text(final)
 
 class SwarmAgent:
     """Swarm intelligence with multiple simple agents"""
@@ -104,7 +99,7 @@ class SwarmAgent:
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def consensus(self, problem):
         """Reach consensus through voting"""
@@ -130,8 +125,8 @@ Synthesize the best elements from all proposals into one optimal solution:"""
             messages=[{"role": "user", "content": consensus_prompt}]
         )
         
-        print(f"\n🎯 Swarm consensus:\n{final.content[0].text}")
-        return final.content[0].text
+        print(f"\n🎯 Swarm consensus:\n{first_text(final)}")
+        return first_text(final)
 
 if __name__ == "__main__":
     print("=== Hierarchical Agent ===")
