@@ -3,6 +3,7 @@
 import json
 import os
 import time
+
 import anthropic
 
 # Model configuration
@@ -31,12 +32,37 @@ def get_client() -> anthropic.Anthropic:
     return anthropic.Anthropic()
 
 
-def api_call_with_retry(client, max_retries=MAX_RETRIES, **kwargs):
+def first_text(response, default=""):
+    """Safely extract the first text block from an Anthropic API response.
+
+    The response ``content`` is a list of blocks that may include non-text
+    blocks (e.g. tool_use) or be empty. Indexing ``content[0].text`` directly
+    can raise IndexError/AttributeError. This helper returns the first block
+    that exposes a ``text`` attribute, or ``default`` if none is present.
+
+    Args:
+        response: Anthropic message response object
+        default: Value returned when no text block is found
+
+    Returns:
+        The first text block's text, or ``default``
+    """
+    content = getattr(response, "content", None) or []
+    return next(
+        (block.text for block in content if hasattr(block, "text")),
+        default,
+    )
+
+
+def api_call_with_retry(client, max_retries=MAX_RETRIES, rate_limiter=None, **kwargs):
     """Make an API call with exponential backoff retry on transient errors.
 
     Args:
         client: Anthropic client instance
         max_retries: Maximum number of retry attempts
+        rate_limiter: Optional AgentRateLimiter-like object. If provided, the
+            call blocks until the limiter permits a request (via ``allow_request``
+            / ``time_until_available``) before contacting the API.
         **kwargs: Arguments passed to client.messages.create()
 
     Returns:
@@ -48,6 +74,15 @@ def api_call_with_retry(client, max_retries=MAX_RETRIES, **kwargs):
     # Apply defaults
     kwargs.setdefault("model", MODEL_NAME)
     kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
+
+    # Optional client-side rate limiting: wait until a request slot is free.
+    if rate_limiter is not None:
+        while not rate_limiter.allow_request():
+            wait = rate_limiter.time_until_available()
+            if wait <= 0:
+                break
+            print(f"\u23f3 Rate limit reached. Waiting {wait:.1f}s...")
+            time.sleep(wait)
 
     last_error = None
     for attempt in range(max_retries + 1):
@@ -201,9 +236,16 @@ def is_path_safe(filepath, sandbox_dir=None):
     if sandbox_dir is None:
         sandbox_dir = SANDBOX_DIR
 
+    sandbox_resolved = os.path.realpath(os.path.abspath(sandbox_dir))
+
+    # Relative paths are interpreted relative to the sandbox directory rather
+    # than the process's current working directory. This keeps tool behaviour
+    # predictable and consistent with the "sandboxed to workspace" contract.
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(sandbox_resolved, filepath)
+
     # Resolve to absolute path, resolving symlinks
     resolved = os.path.realpath(os.path.abspath(filepath))
-    sandbox_resolved = os.path.realpath(os.path.abspath(sandbox_dir))
 
     # Check the resolved path starts with sandbox
     return resolved.startswith(sandbox_resolved + os.sep) or resolved == sandbox_resolved
