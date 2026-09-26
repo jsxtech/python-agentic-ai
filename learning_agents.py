@@ -1,15 +1,16 @@
 import json
+from collections import deque
 from datetime import datetime
 
-from config import api_call_with_retry, first_text, get_client
+from config import api_call_with_retry, first_text, get_client, parse_score
 
 client = get_client()
 
 class AgentWithMemory:
     """Agent with episodic and semantic memory"""
     
-    def __init__(self):
-        self.episodic_memory = []  # Specific experiences
+    def __init__(self, max_episodes=1000):
+        self.episodic_memory = deque(maxlen=max_episodes)  # Specific experiences (bounded)
         self.semantic_memory = {}   # General knowledge
         self.working_memory = []    # Current context
     
@@ -112,10 +113,7 @@ Provide just a number:"""
             messages=[{"role": "user", "content": eval_prompt}]
         )
         
-        try:
-            score = float(first_text(eval_response).strip())
-        except (ValueError, TypeError):
-            score = 5.0
+        score = parse_score(first_text(eval_response), default=5.0)
         
         # Track performance
         if strategy_name not in self.performance:
