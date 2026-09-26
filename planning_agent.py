@@ -1,4 +1,4 @@
-from config import api_call_with_retry, get_client, extract_json_array
+from config import api_call_with_retry, extract_json_array, first_text, get_client
 
 client = get_client()
 
@@ -45,7 +45,7 @@ Example format:
             messages=[{"role": "user", "content": prompt}]
         )
 
-        plan_text = response.content[0].text
+        plan_text = first_text(response)
 
         # Extract JSON from response
         plan = extract_json_array(plan_text)
@@ -69,7 +69,7 @@ Example format:
             messages=[{"role": "user", "content": prompt}]
         )
 
-        return response.content[0].text
+        return first_text(response)
 
     def auto_execute(self, goal):
         """Create and execute a plan automatically"""
