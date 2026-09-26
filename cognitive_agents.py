@@ -1,7 +1,7 @@
-from config import api_call_with_retry, get_client, extract_json_object
 import json
 from datetime import datetime
-from typing import List, Dict
+
+from config import api_call_with_retry, extract_json_object, first_text, get_client
 
 client = get_client()
 
@@ -25,13 +25,10 @@ Update the world state. Return JSON with updated state:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        try:
-            result = response.content[0].text
-            parsed = extract_json_object(result)
-            if parsed is not None:
-                self.world_state = parsed
-        except:
-            pass
+        result = first_text(response)
+        parsed = extract_json_object(result)
+        if parsed is not None:
+            self.world_state = parsed
         
         self.history.append({"time": datetime.now().isoformat(), "observation": observation})
         return self.world_state
@@ -49,7 +46,7 @@ Predict the outcome and new world state:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def plan_with_model(self, goal):
         """Plan actions using world model"""
@@ -64,7 +61,7 @@ Create a plan considering the current world state:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class GoalOrientedAgent:
     """Agent with explicit goal management"""
@@ -97,7 +94,7 @@ Respond with the goal text:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        selected = response.content[0].text.strip()
+        selected = first_text(response).strip()
         
         for goal in self.goals:
             if goal["goal"] in selected:
@@ -117,7 +114,7 @@ Respond with the goal text:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        plan = response.content[0].text
+        plan = first_text(response)
         print(f"Plan: {plan}")
         
         goal["status"] = "completed"
@@ -149,7 +146,7 @@ How would this event affect emotional state? Return JSON with updated valence, a
             messages=[{"role": "user", "content": prompt}]
         )
 
-        result = response.content[0].text
+        result = first_text(response)
         parsed = extract_json_object(result)
         if parsed is not None and all(k in parsed for k in ("valence", "arousal", "dominance")):
             try:
@@ -178,7 +175,7 @@ Respond in a way that reflects your emotional state:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def get_emotion_label(self):
         v, a = self.emotional_state["valence"], self.emotional_state["arousal"]
@@ -217,7 +214,7 @@ REASONING: [detailed explanation]"""
             messages=[{"role": "user", "content": decision_prompt}]
         )
         
-        result = response.content[0].text
+        result = first_text(response)
         print(result)
         
         return result
@@ -238,7 +235,7 @@ Provide counterfactual explanations:
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 if __name__ == "__main__":
     print("=== World Model Agent ===")
