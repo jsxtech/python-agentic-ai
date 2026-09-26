@@ -1,7 +1,7 @@
-from config import api_call_with_retry, get_client
 import json
 from datetime import datetime
-from typing import List, Dict, Any
+
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -9,7 +9,7 @@ class NegotiationAgent:
     """Agent that negotiates with other agents"""
     
     def negotiate(self, my_goal, other_goal, rounds=3):
-        print(f"🤝 Negotiation")
+        print("🤝 Negotiation")
         print(f"My goal: {my_goal}")
         print(f"Other's goal: {other_goal}\n")
         
@@ -32,7 +32,7 @@ Make a proposal that moves toward agreement:"""
                 messages=[{"role": "user", "content": my_prompt}]
             )
             
-            my_position = my_response.content[0].text
+            my_position = first_text(my_response)
             print(f"My proposal: {my_position}")
             
             # Other's counter
@@ -48,7 +48,7 @@ Counter-propose or accept:"""
                 messages=[{"role": "user", "content": other_prompt}]
             )
             
-            other_position = other_response.content[0].text
+            other_position = first_text(other_response)
             print(f"Their response: {other_position}\n")
             
             if "accept" in other_position.lower():
@@ -74,7 +74,7 @@ Return JSON: {{"score": 0-10, "gaps": [], "strengths": []}}"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def teach(self, topic, learner_level="beginner"):
         print(f"👨‍🏫 Teaching: {topic} (Level: {learner_level})\n")
@@ -92,7 +92,7 @@ Use:
             messages=[{"role": "user", "content": explain_prompt}]
         )
         
-        lesson = response.content[0].text
+        lesson = first_text(response)
         print(f"Lesson:\n{lesson}\n")
         
         # Simulate learner response
@@ -104,10 +104,10 @@ Use:
             messages=[{"role": "user", "content": learner_prompt}]
         )
         
-        print(f"Learner answer: {learner_response.content[0].text}\n")
+        print(f"Learner answer: {first_text(learner_response)}\n")
         
         # Assess and provide feedback
-        assessment = self.assess_knowledge(learner_response.content[0].text, topic)
+        assessment = self.assess_knowledge(first_text(learner_response), topic)
         print(f"Assessment: {assessment}")
         
         return lesson
@@ -142,7 +142,7 @@ Which agent is best suited? Respond with agent name:"""
                 messages=[{"role": "user", "content": assignment_prompt}]
             )
             
-            assigned_agent = response.content[0].text.strip()
+            assigned_agent = first_text(response).strip()
             
             # Find matching agent
             for agent_name in self.agents:
@@ -183,7 +183,7 @@ Provide structured analysis:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        analysis = response.content[0].text
+        analysis = first_text(response)
         print(analysis)
         
         return analysis
