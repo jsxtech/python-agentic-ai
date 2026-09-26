@@ -11,7 +11,7 @@ from config import (
     api_call_with_retry,
     first_text,
     get_client,
-    is_path_safe,
+    safe_resolved_path,
 )
 
 client = get_client()
@@ -185,21 +185,37 @@ def calculate(expression):
             else:
                 return f"Error: Unsupported expression element: {type(node).__name__}"
 
-        # Prevent DoS via large exponents (e.g., 2**999999999)
-        # Only allow Pow when the exponent is a small numeric constant
+        # Prevent DoS via large exponents (e.g., 2**999999999) and nested
+        # powers such as (10**1000)**1000 whose base is itself an expression.
+        def _const_value(n):
+            """Return the numeric value of a Constant or unary-signed Constant, else None."""
+            if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+                return n.value
+            if (
+                isinstance(n, ast.UnaryOp)
+                and isinstance(n.op, (ast.UAdd, ast.USub))
+                and isinstance(n.operand, ast.Constant)
+                and isinstance(n.operand.value, (int, float))
+            ):
+                return -n.operand.value if isinstance(n.op, ast.USub) else n.operand.value
+            return None
+
         for node in ast.walk(tree):
             if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-                # Exponent must be a direct numeric constant (not an expression)
-                if not isinstance(node.right, ast.Constant):
+                # Exponent must be a direct numeric constant (not an expression).
+                exp = _const_value(node.right)
+                if exp is None:
                     return "Error: Exponent must be a simple number (not an expression)"
-                if not isinstance(node.right.value, (int, float)):
-                    return "Error: Exponent must be numeric"
-                if abs(node.right.value) > 1000:
+                if abs(exp) > 1000:
                     return "Error: Exponent too large (max 1000)"
-                # Also limit the base if it's a large constant
-                if isinstance(node.left, ast.Constant) and isinstance(node.left.value, (int, float)):
-                    if abs(node.left.value) > 10000 and abs(node.right.value) > 100:
-                        return "Error: Base and exponent combination too large"
+                # Base must ALSO be a simple numeric constant. This blocks
+                # nested powers like (10**1000)**1000 where the base is a
+                # BinOp that would otherwise evade the magnitude check.
+                base = _const_value(node.left)
+                if base is None:
+                    return "Error: Power base must be a simple number (nested powers not allowed)"
+                if abs(base) > 10000 and abs(exp) > 100:
+                    return "Error: Base and exponent combination too large"
 
         # Safe to evaluate
         result = eval(compile(tree, "<expression>", "eval"), {"__builtins__": {}}, {})
@@ -229,34 +245,52 @@ def web_search(query):
 
 
 def read_file(filepath):
-    if not is_path_safe(filepath):
+    resolved = safe_resolved_path(filepath)
+    if resolved is None:
         return f"Error: Access denied. Path must be within {SANDBOX_DIR}"
     try:
-        with open(filepath) as f:
+        # Open the *resolved* path and refuse to follow a final symlink to
+        # avoid a TOCTOU/symlink escape between validation and open.
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(resolved, flags)
+        with os.fdopen(fd) as f:
             return f.read()
-    except Exception as e:
+    except OSError as e:
         return f"Error reading file: {str(e)}"
 
 
 def write_file(filepath, content):
-    if not is_path_safe(filepath):
+    resolved = safe_resolved_path(filepath)
+    if resolved is None:
         return f"Error: Access denied. Path must be within {SANDBOX_DIR}"
     try:
-        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, 'w') as f:
+        parent = os.path.dirname(resolved)
+        # Ensure the parent directory is itself inside the sandbox before
+        # creating it.
+        if safe_resolved_path(parent) is None:
+            return f"Error: Access denied. Path must be within {SANDBOX_DIR}"
+        os.makedirs(parent, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(resolved, flags, 0o600)
+        with os.fdopen(fd, "w") as f:
             f.write(content)
-        return f"Successfully wrote to {filepath}"
-    except Exception as e:
+        return f"Successfully wrote to {resolved}"
+    except OSError as e:
         return f"Error writing file: {str(e)}"
 
 
 def list_files(directory):
-    if not is_path_safe(directory):
+    resolved = safe_resolved_path(directory)
+    if resolved is None:
         return f"Error: Access denied. Path must be within {SANDBOX_DIR}"
     try:
-        files = [str(p) for p in Path(directory).iterdir()]
+        files = [str(p) for p in Path(resolved).iterdir()]
         return "\n".join(files)
-    except Exception as e:
+    except OSError as e:
         return f"Error listing files: {str(e)}"
 
 
