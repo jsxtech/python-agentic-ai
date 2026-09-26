@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
-from config import api_call_with_retry, get_client
+
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -64,7 +65,7 @@ Use your memory to inform your response:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        result = response.content[0].text
+        result = first_text(response)
         
         # Store this experience
         self.remember_episode(task, memory_context, result)
@@ -96,7 +97,7 @@ Execute this task using the specified approach:"""
         )
         
         duration = (datetime.now() - start).total_seconds()
-        result = response.content[0].text
+        result = first_text(response)
         
         # Evaluate result quality
         eval_prompt = f"""Rate this response on a scale of 1-10:
@@ -112,8 +113,8 @@ Provide just a number:"""
         )
         
         try:
-            score = float(eval_response.content[0].text.strip())
-        except:
+            score = float(first_text(eval_response).strip())
+        except (ValueError, TypeError):
             score = 5.0
         
         # Track performance
