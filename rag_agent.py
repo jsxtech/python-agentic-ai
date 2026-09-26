@@ -106,10 +106,17 @@ Answer:"""
         return first_text(response)
 
     def add_document(self, filename, content):
-        """Add a new document to knowledge base."""
+        """Add a new document to knowledge base.
+
+        Only ``.txt`` files are accepted because :meth:`load_knowledge` only
+        re-reads ``*.txt`` on startup; other extensions would silently vanish
+        after a restart.
+        """
         # Validate filename to prevent path traversal
         if '/' in filename or '\\' in filename or '..' in filename:
             return "Error: Invalid filename (must not contain path separators or '..')"
+        if not filename.lower().endswith(".txt"):
+            return "Error: Only .txt documents are supported"
         filepath = self.knowledge_dir / filename
         # Double-check resolved path is within knowledge_dir
         resolved = str(filepath.resolve())
