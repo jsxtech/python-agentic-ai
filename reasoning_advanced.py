@@ -1,7 +1,4 @@
-import json
-from typing import List, Dict, Any
-
-from config import api_call_with_retry, extract_json_object, get_client
+from config import api_call_with_retry, extract_json_object, first_text, get_client
 
 client = get_client()
 
@@ -25,7 +22,7 @@ Format: {{"atomic": true/false, "subtasks": ["...", "..."]}}"""
             messages=[{"role": "user", "content": prompt}]
         )
 
-        result = response.content[0].text
+        result = first_text(response)
         data = extract_json_object(result)
 
         if data is None or data.get("atomic", False) or not data.get("subtasks"):
@@ -63,7 +60,7 @@ Find a solution that satisfies ALL constraints. Show your reasoning:"""
             messages=[{"role": "user", "content": prompt}]
         )
 
-        solution = response.content[0].text
+        solution = first_text(response)
 
         # Verify constraints
         verify_prompt = f"""Problem: {problem}
@@ -80,7 +77,7 @@ Does this solution satisfy all constraints? Respond with JSON:
         )
 
         print(f"Solution: {solution}")
-        print(f"\nVerification: {verify_response.content[0].text}")
+        print(f"\nVerification: {first_text(verify_response)}")
 
         return solution
 
@@ -104,7 +101,7 @@ Find an analogous situation in {source_domain} that maps to this problem:"""
             messages=[{"role": "user", "content": analogy_prompt}]
         )
 
-        analogy = analogy_response.content[0].text
+        analogy = first_text(analogy_response)
         print(f"Analogy: {analogy}\n")
 
         # Transfer solution
@@ -119,7 +116,7 @@ Transfer the solution approach from the analogy to solve the original problem:""
             messages=[{"role": "user", "content": transfer_prompt}]
         )
 
-        solution = solution_response.content[0].text
+        solution = first_text(solution_response)
         print(f"Solution: {solution}")
 
         return solution
@@ -142,7 +139,7 @@ What are the likely causes? List 3-5 potential causes with confidence levels:"""
             messages=[{"role": "user", "content": cause_prompt}]
         )
 
-        causes = cause_response.content[0].text
+        causes = first_text(cause_response)
         print(f"Potential causes:\n{causes}\n")
 
         # Predict effects
@@ -157,7 +154,7 @@ What are the likely downstream effects? Consider short-term and long-term:"""
             messages=[{"role": "user", "content": effect_prompt}]
         )
 
-        effects = effect_response.content[0].text
+        effects = first_text(effect_response)
         print(f"Predicted effects:\n{effects}\n")
 
         # Interventions
@@ -173,7 +170,7 @@ What interventions could change the outcome?"""
             messages=[{"role": "user", "content": intervention_prompt}]
         )
 
-        interventions = intervention_response.content[0].text
+        interventions = first_text(intervention_response)
         print(f"Possible interventions:\n{interventions}")
 
         return {"causes": causes, "effects": effects, "interventions": interventions}
