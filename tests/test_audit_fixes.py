@@ -180,3 +180,28 @@ def test_rag_rejects_non_txt(tmp_path):
     rag = RAGAgent(knowledge_dir=str(tmp_path))
     assert rag.add_document("notes.md", "x").startswith("Error")
     assert "Added" in rag.add_document("notes.txt", "x")
+
+
+# --- agent_testing guards --------------------------------------------------
+
+def test_benchmark_zero_iterations_no_crash():
+    from agent_testing import AgentBenchmark
+    b = AgentBenchmark()
+    result = b.run_benchmark("noop", lambda x: x, "in", iterations=0)
+    assert result["iterations"] == 0
+    assert result["avg_time"] == "0.00s"
+
+
+def test_abtest_no_variants_no_crash():
+    from agent_testing import AgentABTest
+    ab = AgentABTest()
+    result = ab.run_test("input")
+    assert result["error"] == "No variants registered"
+
+
+def test_abtest_unknown_variant():
+    from agent_testing import AgentABTest
+    ab = AgentABTest()
+    ab.add_variant("A", lambda x: "a")
+    result = ab.run_test("input", variant="Z")
+    assert "Unknown variant" in result["error"]
