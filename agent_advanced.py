@@ -1,6 +1,14 @@
-from config import api_call_with_retry, get_client, extract_json_object, extract_json_array
-import json
-from typing import List, Dict
+from typing import Dict, List
+
+from config import (
+    DEFAULT_MAX_REQUESTS,
+    DEFAULT_RATE_WINDOW,
+    api_call_with_retry,
+    extract_json_array,
+    extract_json_object,
+    first_text,
+    get_client,
+)
 
 client = get_client()
 
@@ -45,7 +53,7 @@ class AgentWorkflow:
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class AgentPlugin:
     """Plugin system for extending agent capabilities"""
@@ -75,7 +83,7 @@ def sentiment_analysis(text: str) -> Dict:
         messages=[{"role": "user", "content": prompt}]
     )
     
-    result = extract_json_object(response.content[0].text)
+    result = extract_json_object(first_text(response))
     if result is not None:
         return result
     return {"sentiment": "neutral", "score": 5}
@@ -90,7 +98,7 @@ def entity_extraction(text: str) -> List[Dict]:
         messages=[{"role": "user", "content": prompt}]
     )
     
-    result = extract_json_array(response.content[0].text)
+    result = extract_json_array(first_text(response))
     if result is not None:
         return result
     return []
@@ -108,30 +116,35 @@ Return JSON: {{"intent": "...", "confidence": 0-1}}"""
         messages=[{"role": "user", "content": prompt}]
     )
     
-    result = extract_json_object(response.content[0].text)
+    result = extract_json_object(first_text(response))
     if result is not None:
         return result
     return {"intent": "statement", "confidence": 0.5}
 
 class AgentCache:
-    """Cache agent responses for faster retrieval"""
-    
+    """Cache agent responses for faster retrieval.
+
+    Eviction is FIFO (first-inserted is evicted first) when ``max_size`` is
+    exceeded. Note this is not LRU: reads via :meth:`get` do not refresh an
+    entry's position.
+    """
+
     def __init__(self, max_size: int = 100):
         self.cache = {}
         self.max_size = max_size
         self.hits = 0
         self.misses = 0
-    
+
     def get(self, key: str):
         if key in self.cache:
             self.hits += 1
             return self.cache[key]
         self.misses += 1
         return None
-    
+
     def set(self, key: str, value):
-        if len(self.cache) >= self.max_size:
-            # Remove oldest
+        if key not in self.cache and len(self.cache) >= self.max_size:
+            # Evict oldest inserted entry (FIFO)
             self.cache.pop(next(iter(self.cache)))
         self.cache[key] = value
     
@@ -146,9 +159,16 @@ class AgentCache:
         }
 
 class AgentRateLimiter:
-    """Rate limiting for API calls"""
-    
-    def __init__(self, max_requests: int = 10, window: int = 60):
+    """Sliding-window rate limiter for API calls.
+
+    Pass an instance to :func:`config.api_call_with_retry` via its
+    ``rate_limiter`` argument to gate real API traffic, e.g.::
+
+        limiter = AgentRateLimiter()
+        api_call_with_retry(client, rate_limiter=limiter, messages=...)
+    """
+
+    def __init__(self, max_requests: int = DEFAULT_MAX_REQUESTS, window: int = DEFAULT_RATE_WINDOW):
         self.max_requests = max_requests
         self.window = window
         self.requests = []
