@@ -101,15 +101,18 @@ class AgentMonitor:
             "response_time": 5.0,
             "error_rate": 0.1
         }
-    
+        self._error_alerted = False
+
     def log_error(self, error: str, context: Dict = None):
         self.metrics["errors"].append({
             "error": error,
             "context": context,
             "timestamp": datetime.now().isoformat()
         })
-        
-        if len(self.metrics["errors"]) > 10:
+
+        # Alert once when crossing the threshold, not on every subsequent call.
+        if len(self.metrics["errors"]) > 10 and not self._error_alerted:
+            self._error_alerted = True
             self.alert("High error rate detected")
     
     def log_performance(self, response_time: float):
@@ -124,17 +127,25 @@ class AgentMonitor:
     def get_health(self) -> Dict:
         """Get system health status"""
         error_count = len(self.metrics["errors"])
-        avg_response = sum(self.metrics["performance"]) / len(self.metrics["performance"]) if self.metrics["performance"] else 0
-        
+        perf = self.metrics["performance"]
+        avg_response = sum(perf) / len(perf) if perf else 0
+
+        # error_rate = errors relative to total observed operations
+        # (errors + performance samples), compared against the configured
+        # threshold instead of only using a raw error count.
+        total_ops = error_count + len(perf)
+        error_rate = error_count / total_ops if total_ops else 0
+
         health = "healthy"
-        if error_count > 5:
+        if error_count > 5 or error_rate > self.thresholds["error_rate"]:
             health = "degraded"
-        if error_count > 10:
+        if error_count > 10 or error_rate > self.thresholds["error_rate"] * 5:
             health = "critical"
-        
+
         return {
             "status": health,
             "error_count": error_count,
+            "error_rate": f"{error_rate:.1%}",
             "avg_response_time": f"{avg_response:.2f}s",
             "uptime": "99.9%"
         }
