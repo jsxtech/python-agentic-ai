@@ -1,5 +1,6 @@
 """Agent Orchestrator — Auto-routing, validation, memory management, analytics, and chaining."""
 
+from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -13,7 +14,7 @@ class AgentRouter:
 
     def __init__(self):
         self.agents = {}
-        self.routing_history = []
+        self.routing_history = deque(maxlen=1000)
 
     def register_agent(self, name: str, description: str, handler):
         """Register an agent with its capability description."""
@@ -178,7 +179,7 @@ class Analytics:
     """Performance tracking and reporting for agent operations."""
 
     def __init__(self):
-        self.events = []
+        self.events = deque(maxlen=1000)
         self.metrics = {
             "total_queries": 0,
             "total_latency": 0.0,
@@ -216,7 +217,7 @@ class Analytics:
             "avg_latency": f"{avg_latency:.2f}s",
             "error_rate": f"{error_rate:.1%}",
             "agent_usage": self.metrics["agent_usage"],
-            "recent_events": self.events[-10:]
+            "recent_events": list(self.events)[-10:]
         }
 
 
