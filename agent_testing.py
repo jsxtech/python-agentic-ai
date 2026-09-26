@@ -1,7 +1,7 @@
-from config import api_call_with_retry, get_client
-import json
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
+
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
             max_tokens=256,
             messages=[{"role": "user", "content": input_text}]
         )
-        return response.content[0].text
+        return first_text(response)
     
     # Testing
     print("=== Testing ===")
