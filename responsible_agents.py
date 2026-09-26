@@ -1,6 +1,4 @@
-from config import api_call_with_retry, get_client
-import json
-from datetime import datetime
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -12,7 +10,7 @@ class EthicalAgent:
         self.values = ["fairness", "transparency", "privacy", "safety"]
     
     def evaluate_action(self, action, context):
-        print(f"⚖️  Ethical Evaluation")
+        print("⚖️  Ethical Evaluation")
         print(f"Action: {action}")
         print(f"Context: {context}\n")
         
@@ -37,7 +35,7 @@ Provide structured analysis:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        evaluation = response.content[0].text
+        evaluation = first_text(response)
         print(evaluation)
         
         return evaluation
@@ -60,13 +58,13 @@ Which option is more ethical? Explain reasoning:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class SafetyAgent:
     """Agent focused on safety and risk management"""
     
     def assess_risk(self, action, environment):
-        print(f"🛡️  Safety Assessment")
+        print("🛡️  Safety Assessment")
         print(f"Action: {action}")
         print(f"Environment: {environment}\n")
         
@@ -87,7 +85,7 @@ Return JSON: {{"risk_level": "...", "hazards": [], "mitigations": []}}"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        assessment = response.content[0].text
+        assessment = first_text(response)
         print(assessment)
         
         return assessment
@@ -108,7 +106,7 @@ Create a comprehensive safety plan:
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class PrivacyAgent:
     """Agent that protects privacy and handles sensitive data"""
@@ -131,7 +129,7 @@ Return JSON: {{"contains_pii": true/false, "found": [], "risk_level": "low/mediu
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def anonymize(self, text):
         """Anonymize sensitive information"""
@@ -146,7 +144,7 @@ Preserve the meaning while protecting privacy:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
     
     def check_consent(self, data_usage, user_permissions):
         """Check if data usage complies with user consent"""
@@ -161,7 +159,7 @@ Does this usage comply with user consent? Explain:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class BiasDetectionAgent:
     """Agent that detects and mitigates bias"""
@@ -170,7 +168,7 @@ class BiasDetectionAgent:
         if bias_types is None:
             bias_types = ["gender", "racial", "age", "cultural", "socioeconomic"]
         
-        print(f"🔍 Bias Detection")
+        print("🔍 Bias Detection")
         print(f"Analyzing for: {bias_types}\n")
         
         prompt = f"""Text: {text}
@@ -191,7 +189,7 @@ Return structured analysis:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        analysis = response.content[0].text
+        analysis = first_text(response)
         print(analysis)
         
         return analysis
@@ -211,7 +209,7 @@ Rewrite to remove biases while preserving meaning:
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 if __name__ == "__main__":
     print("=== Ethical Agent ===")
