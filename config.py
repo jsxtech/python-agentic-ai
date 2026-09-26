@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 
 import anthropic
@@ -52,6 +53,27 @@ def first_text(response, default=""):
         (block.text for block in content if hasattr(block, "text")),
         default,
     )
+
+
+def parse_score(text, default=5.0, low=0.0, high=10.0):
+    """Extract the first numeric score from free-form LLM text.
+
+    Handles responses like ``"8"``, ``"Score: 8"``, ``"8/10"`` or
+    ``"I'd rate it 7.5 out of 10"`` by taking the first number found and
+    clamping it to ``[low, high]``. Returns ``default`` when no number is
+    present. This avoids the brittle ``float(text.strip())`` pattern that
+    silently collapses to a mid-range default on any surrounding prose.
+    """
+    if text is None:
+        return default
+    match = re.search(r"-?\d+(?:\.\d+)?", str(text))
+    if not match:
+        return default
+    try:
+        value = float(match.group())
+    except (ValueError, TypeError):
+        return default
+    return max(low, min(high, value))
 
 
 def api_call_with_retry(client, max_retries=MAX_RETRIES, rate_limiter=None, **kwargs):
@@ -233,6 +255,25 @@ def is_path_safe(filepath, sandbox_dir=None):
     Returns:
         True if path is safe, False otherwise
     """
+    return safe_resolved_path(filepath, sandbox_dir) is not None
+
+
+def safe_resolved_path(filepath, sandbox_dir=None):
+    """Return the fully-resolved absolute path if it is inside the sandbox.
+
+    This resolves symlinks and ``..`` components and confirms the result is
+    contained within the sandbox directory. Callers should open/operate on the
+    *returned* path (never the original argument) to avoid a time-of-check /
+    time-of-use (TOCTOU) gap where a symlink could redirect the real open
+    outside the sandbox.
+
+    Args:
+        filepath: Path to validate
+        sandbox_dir: Allowed directory (defaults to SANDBOX_DIR)
+
+    Returns:
+        The resolved absolute path (str) if safe, otherwise ``None``.
+    """
     if sandbox_dir is None:
         sandbox_dir = SANDBOX_DIR
 
@@ -247,5 +288,6 @@ def is_path_safe(filepath, sandbox_dir=None):
     # Resolve to absolute path, resolving symlinks
     resolved = os.path.realpath(os.path.abspath(filepath))
 
-    # Check the resolved path starts with sandbox
-    return resolved.startswith(sandbox_resolved + os.sep) or resolved == sandbox_resolved
+    if resolved == sandbox_resolved or resolved.startswith(sandbox_resolved + os.sep):
+        return resolved
+    return None
