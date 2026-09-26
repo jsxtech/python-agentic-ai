@@ -1,8 +1,7 @@
-import json
 import os
 from pathlib import Path
 
-from config import api_call_with_retry, get_client
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -37,12 +36,12 @@ class RAGAgent:
         self.knowledge_base = []
         for file in self.knowledge_dir.glob("*.txt"):
             try:
-                with open(file, 'r') as f:
+                with open(file) as f:
                     self.knowledge_base.append({
                         "source": file.name,
                         "content": f.read()
                     })
-            except (IOError, OSError) as e:
+            except OSError as e:
                 print(f"Warning: Could not load {file}: {e}")
 
     def search_knowledge(self, query):
@@ -104,7 +103,7 @@ Answer:"""
             messages=[{"role": "user", "content": prompt}]
         )
 
-        return response.content[0].text
+        return first_text(response)
 
     def add_document(self, filename, content):
         """Add a new document to knowledge base."""
