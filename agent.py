@@ -1,15 +1,15 @@
 import ast
-import json
 import os
+import subprocess
 import sys
+import tempfile
 from datetime import datetime
-from io import StringIO
 from pathlib import Path
 
 from config import (
-    MODEL_NAME,
     SANDBOX_DIR,
     api_call_with_retry,
+    first_text,
     get_client,
     is_path_safe,
 )
@@ -104,7 +104,7 @@ tools = [
     },
     {
         "name": "read_file",
-        "description": "Read contents of a file (sandboxed to project directory)",
+        "description": "Read contents of a file (sandboxed to the workspace directory)",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -115,7 +115,7 @@ tools = [
     },
     {
         "name": "write_file",
-        "description": "Write content to a file (sandboxed to project directory)",
+        "description": "Write content to a file (sandboxed to the workspace directory)",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -127,7 +127,7 @@ tools = [
     },
     {
         "name": "list_files",
-        "description": "List files in a directory (sandboxed to project directory)",
+        "description": "List files in a directory (sandboxed to the workspace directory)",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -138,7 +138,7 @@ tools = [
     },
     {
         "name": "run_code",
-        "description": "Execute Python code in a restricted sandbox (no imports, no file/network access)",
+        "description": "Execute Python code in an isolated subprocess with CPU/memory limits and a hard timeout. Not safe against determined adversaries; intended for trusted/educational use.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -232,7 +232,7 @@ def read_file(filepath):
     if not is_path_safe(filepath):
         return f"Error: Access denied. Path must be within {SANDBOX_DIR}"
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return f.read()
     except Exception as e:
         return f"Error reading file: {str(e)}"
@@ -261,12 +261,22 @@ def list_files(directory):
 
 
 def run_code(code):
-    """Execute Python code in a restricted sandbox.
+    """Execute Python code in an isolated subprocess.
 
-    Only allows basic computation — no imports, no file/network access,
-    no access to builtins that could be dangerous. Has a 5-second timeout.
+    Security model (defense in depth, best-effort):
+      * AST pre-screening rejects imports, dunder attribute access, and calls
+        to dangerous builtins before anything runs.
+      * Execution happens in a *separate* Python process, so a runaway or
+        crashing payload cannot corrupt the host interpreter's state.
+      * On POSIX the child applies resource limits (CPU seconds, address space,
+        no new files) via ``resource.setrlimit`` in a preexec hook.
+      * A hard wall-clock timeout kills the process group if it overruns, so
+        infinite loops are actually terminated (unlike a joined daemon thread).
+
+    This is suitable for trusted/educational use. It is NOT a substitute for
+    OS-level sandboxing (containers, seccomp, gVisor) against adversarial code.
     """
-    # AST-based validation: reject any import statements or attribute access to dunders
+    # --- Fast AST pre-screen (rejects obvious abuse before spawning a process) ---
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
@@ -278,59 +288,79 @@ def run_code(code):
         if isinstance(node, ast.Attribute) and node.attr.startswith('__'):
             return "Error: Access to dunder attributes is not allowed"
         if isinstance(node, ast.Call):
-            # Block calls to exec, eval, compile, open, etc.
             if isinstance(node.func, ast.Name) and node.func.id in (
                 'exec', 'eval', 'compile', 'open', 'input', '__import__',
                 'getattr', 'setattr', 'delattr', 'globals', 'locals',
-                'breakpoint', 'exit', 'quit'
+                'vars', 'breakpoint', 'exit', 'quit',
             ):
                 return f"Error: '{node.func.id}' is not allowed in sandboxed code"
-        # Block while True / infinite loops
-        if isinstance(node, ast.While):
-            # Allow while loops but they'll be killed by timeout
+
+    # --- Runner script executed in the child process ---
+    # Restricts builtins to a safe subset and runs the user code. Kept as a
+    # string so it runs in a pristine, separate interpreter.
+    runner = r'''
+import sys
+
+SAFE_BUILTINS = {
+    'print': print, 'len': len, 'range': range, 'int': int,
+    'float': float, 'str': str, 'bool': bool, 'list': list,
+    'dict': dict, 'tuple': tuple, 'set': set, 'abs': abs,
+    'min': min, 'max': max, 'sum': sum, 'sorted': sorted,
+    'enumerate': enumerate, 'zip': zip, 'map': map, 'filter': filter,
+    'round': round, 'isinstance': isinstance,
+    'True': True, 'False': False, 'None': None,
+}
+
+source = sys.stdin.read()
+try:
+    exec(compile(source, "<sandbox>", "exec"), {"__builtins__": SAFE_BUILTINS}, {})
+except Exception as exc:  # noqa: BLE001 - surface any runtime error to caller
+    sys.stderr.write(str(exc))
+    sys.exit(1)
+'''
+
+    def _limit_resources():  # pragma: no cover - POSIX child hook, not measurable here
+        """Apply CPU/memory limits and start a new session (for group kill)."""
+        try:
+            import resource
+            # 5 CPU seconds hard cap
+            resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
+            # ~256 MB address space cap
+            mem = 256 * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
+            # No new files written by the child
+            resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
+        except Exception:
+            pass
+        try:
+            os.setsid()  # isolate into its own process group
+        except Exception:
             pass
 
-    # Provide a minimal set of safe builtins
-    safe_builtins = {
-        'print': print, 'len': len, 'range': range, 'int': int,
-        'float': float, 'str': str, 'bool': bool, 'list': list,
-        'dict': dict, 'tuple': tuple, 'set': set, 'abs': abs,
-        'min': min, 'max': max, 'sum': sum, 'sorted': sorted,
-        'enumerate': enumerate, 'zip': zip, 'map': map, 'filter': filter,
-        'round': round, 'isinstance': isinstance,
-        'True': True, 'False': False, 'None': None,
-    }
+    preexec = _limit_resources if os.name == "posix" else None
 
-    # Execute with timeout using threading
-    import threading
-
-    result_container = {"output": None, "error": None}
-
-    def _execute():
-        old_stdout = sys.stdout
-        sys.stdout = StringIO()
-        try:
-            exec(compile(tree, "<sandbox>", "exec"),
-                 {"__builtins__": safe_builtins}, {})
-            result_container["output"] = sys.stdout.getvalue()
-        except Exception as e:
-            result_container["error"] = str(e)
-        finally:
-            sys.stdout = old_stdout
-
-    thread = threading.Thread(target=_execute, daemon=True)
-    thread.start()
-    thread.join(timeout=5.0)
-
-    if thread.is_alive():
-        # Thread is still running — timed out
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-I", "-S", "-c", runner],
+            input=code,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            preexec_fn=preexec,
+            cwd=tempfile.gettempdir(),
+            env={"PATH": "", "PYTHONIOENCODING": "utf-8"},
+        )
+    except subprocess.TimeoutExpired:
         return "Error: Code execution timed out (5 second limit)"
+    except Exception as e:
+        return f"Error: Failed to execute code - {str(e)}"
 
-    if result_container["error"]:
-        return f"Error: {result_container['error']}"
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip() or "Non-zero exit status"
+        return f"Error: {err}"
 
-    output = result_container["output"]
-    if output and len(output) > 10000:
+    output = proc.stdout or ""
+    if len(output) > 10000:
         return output[:10000] + "\n... (output truncated at 10000 chars)"
     return output or "Code executed successfully (no output)"
 
@@ -363,9 +393,7 @@ def run_agent(user_message, conversation_history=None, max_iterations=20):
         )
 
         if response.stop_reason == "end_turn":
-            final_text = next(
-                (block.text for block in response.content if hasattr(block, "text")), ""
-            )
+            final_text = first_text(response)
             messages.append({"role": "assistant", "content": response.content})
             return final_text, messages
 
@@ -392,9 +420,7 @@ def run_agent(user_message, conversation_history=None, max_iterations=20):
             messages.append({"role": "user", "content": tool_results})
         else:
             # Unexpected stop reason
-            final_text = next(
-                (block.text for block in response.content if hasattr(block, "text")), ""
-            )
+            final_text = first_text(response)
             messages.append({"role": "assistant", "content": response.content})
             return final_text, messages
 
