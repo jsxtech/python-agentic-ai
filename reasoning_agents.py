@@ -1,6 +1,4 @@
-import json
-
-from config import api_call_with_retry, get_client
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -33,7 +31,7 @@ ANSWER:
             messages=[{"role": "user", "content": prompt}]
         )
 
-        return response.content[0].text
+        return first_text(response)
 
 
 class TreeOfThoughtAgent:
@@ -55,16 +53,19 @@ Show your reasoning and conclusion."""
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            path = response.content[0].text
+            path = first_text(response)
             paths.append(path)
             print(f"Path {i+1}:\n{path}\n")
 
         # Evaluate and select best path
+        approaches_block = "\n".join(
+            f"Approach {i + 1}:\n{p}\n" for i, p in enumerate(paths)
+        )
         evaluation_prompt = f"""Problem: {problem}
 
 Here are {num_paths} different approaches:
 
-{chr(10).join([f"Approach {i+1}:\n{p}\n" for i, p in enumerate(paths)])}
+{approaches_block}
 
 Evaluate each approach and select the best one. Explain why."""
 
@@ -74,7 +75,7 @@ Evaluate each approach and select the best one. Explain why."""
             messages=[{"role": "user", "content": evaluation_prompt}]
         )
 
-        return evaluation.content[0].text
+        return first_text(evaluation)
 
 
 class ReActAgent:
@@ -107,9 +108,10 @@ class ReActAgent:
                 ])
 
             # Reasoning step
+            history_block = f"History:\n{history}" if history else ""
             thought_prompt = f"""Task: {task}
 Available tools: {available_tools}
-{f"History:{chr(10)}{history}" if history else ""}
+{history_block}
 
 Decide what to do next. You MUST respond in this exact format:
 THOUGHT: [your reasoning about what to do next]
@@ -125,11 +127,12 @@ ACTION: FINISH"""
                 messages=[{"role": "user", "content": thought_prompt}]
             )
 
-            result = response.content[0].text
+            result = first_text(response)
             print(f"Iteration {i + 1}:")
             print(result)
 
-            if "FINISH" in result.split("ACTION:")[-1] if "ACTION:" in result else "":
+            action_tail = result.split("ACTION:")[-1] if "ACTION:" in result else ""
+            if "FINISH" in action_tail:
                 print("\n✅ Task completed")
                 break
 
