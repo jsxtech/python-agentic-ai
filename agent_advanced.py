@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from config import (
     DEFAULT_MAX_REQUESTS,
@@ -22,26 +22,40 @@ class AgentWorkflow:
     def add_node(self, node_id: str, agent_type: str, config: Dict):
         self.nodes.append({"id": node_id, "type": agent_type, "config": config})
     
-    def add_edge(self, from_node: str, to_node: str, condition: str = None):
+    def add_edge(self, from_node: str, to_node: str, condition: Optional[str] = None):
         self.edges.append({"from": from_node, "to": to_node, "condition": condition})
     
     def execute(self, input_data: str) -> Dict:
-        """Execute workflow"""
+        """Execute workflow.
+
+        Guards against an empty node list and against edge cycles (which would
+        otherwise loop forever issuing API calls) by tracking visited nodes and
+        capping the number of steps.
+        """
+        if not self.nodes:
+            return {"result": input_data, "path": []}
+
         current = self.nodes[0]
         result = input_data
         path = []
-        
-        while current:
+        visited = set()
+        max_steps = len(self.nodes) + 1  # bound work even if edges form a cycle
+
+        while current and len(path) < max_steps:
+            if current["id"] in visited:
+                # Cycle detected — stop rather than loop forever.
+                break
+            visited.add(current["id"])
             path.append(current["id"])
             result = self._execute_node(current, result)
-            
+
             # Find next node
             next_edge = next((e for e in self.edges if e["from"] == current["id"]), None)
             if not next_edge:
                 break
-            
+
             current = next((n for n in self.nodes if n["id"] == next_edge["to"]), None)
-        
+
         return {"result": result, "path": path}
     
     def _execute_node(self, node: Dict, input_data: str) -> str:
