@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 from config import api_call_with_retry, extract_json_object, first_text, get_client
@@ -82,24 +83,41 @@ class GoalOrientedAgent:
         """Determine which goal to pursue"""
         if not self.goals:
             return None
-        
-        prompt = f"""Goals: {json.dumps(self.goals)}
+
+        # Ask for the goal's index so selection is unambiguous even when one
+        # goal's text is a substring of another's.
+        numbered = "\n".join(
+            f"{i}: [{g['priority']}] {g['goal']}" for i, g in enumerate(self.goals)
+        )
+        prompt = f"""Goals (index: [priority] text):
+{numbered}
 
 Which goal should be pursued next? Consider priority and dependencies.
-Respond with the goal text:"""
-        
+Respond with ONLY the integer index of the chosen goal:"""
+
         response = api_call_with_retry(
             client,
             max_tokens=256,
             messages=[{"role": "user", "content": prompt}]
         )
-        
+
         selected = first_text(response).strip()
-        
+
+        # Prefer an explicit integer index.
+        match = re.search(r"\d+", selected)
+        if match:
+            idx = int(match.group())
+            if 0 <= idx < len(self.goals):
+                return self.goals[idx]
+
+        # Fall back to exact text match, then substring, then first goal.
+        for goal in self.goals:
+            if goal["goal"] == selected:
+                return goal
         for goal in self.goals:
             if goal["goal"] in selected:
                 return goal
-        
+
         return self.goals[0]
     
     def pursue_goal(self, goal):
@@ -179,14 +197,20 @@ Respond in a way that reflects your emotional state:"""
     
     def get_emotion_label(self):
         v, a = self.emotional_state["valence"], self.emotional_state["arousal"]
+        # Treat mid-range valence/arousal as a genuine neutral state rather
+        # than mislabelling it (e.g. the default 0.5/0.5) as "sad/depressed".
+        if 0.4 <= v <= 0.6 and 0.4 <= a <= 0.6:
+            return "neutral"
         if v > 0.6 and a > 0.6:
             return "excited/happy"
         elif v > 0.6 and a < 0.4:
             return "calm/content"
         elif v < 0.4 and a > 0.6:
             return "anxious/angry"
-        else:
+        elif v < 0.4 and a < 0.4:
             return "sad/depressed"
+        else:
+            return "neutral"
 
 class ExplainableAgent:
     """Agent that explains its reasoning"""
