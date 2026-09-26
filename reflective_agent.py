@@ -1,3 +1,4 @@
+from collections import deque
 from datetime import datetime
 
 from config import api_call_with_retry, first_text, get_client
@@ -7,8 +8,8 @@ client = get_client()
 class ReflectiveAgent:
     """Agent that reflects on its actions and learns from mistakes"""
     
-    def __init__(self):
-        self.experience = []
+    def __init__(self, max_experiences=500):
+        self.experience = deque(maxlen=max_experiences)
         self.improvements = []
     
     def act(self, task):
@@ -62,7 +63,7 @@ Now provide an improved response:"""
         return first_text(improved)
     
     def get_experience(self):
-        return self.experience
+        return list(self.experience)
 
 if __name__ == "__main__":
     agent = ReflectiveAgent()
