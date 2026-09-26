@@ -1,6 +1,4 @@
-from config import api_call_with_retry, get_client, extract_json_object
-import json
-from typing import List, Dict
+from config import api_call_with_retry, extract_json_object, first_text, get_client
 
 client = get_client()
 
@@ -25,7 +23,7 @@ Provide JSON: {{"score": 0-10, "issues": [], "suggestions": []}}"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        return response.content[0].text
+        return first_text(response)
 
 class AgentWithCritic:
     """Agent that uses a critic for quality control"""
@@ -38,6 +36,7 @@ class AgentWithCritic:
         print(f"🎯 Task: {task}\n")
         
         current_output = None
+        critique = ""
         
         for i in range(self.max_iterations):
             # Generate solution
@@ -52,7 +51,7 @@ class AgentWithCritic:
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            current_output = response.content[0].text
+            current_output = first_text(response)
             print(f"Iteration {i+1}:\n{current_output[:200]}...\n")
             
             # Get critique
@@ -86,7 +85,7 @@ class DebateAgent:
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            position = response.content[0].text
+            position = first_text(response)
             positions.append({"agent": i+1, "position": position})
             print(f"Agent {i+1}: {position[:100]}...\n")
         
@@ -112,7 +111,7 @@ Respond to other positions and refine your argument:"""
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
-                new_position = response.content[0].text
+                new_position = first_text(response)
                 new_positions.append({"agent": pos['agent'], "position": new_position})
                 print(f"Agent {pos['agent']}: {new_position[:100]}...\n")
             
@@ -132,8 +131,8 @@ Synthesize the best insights from all positions:"""
             messages=[{"role": "user", "content": synthesis_prompt}]
         )
         
-        print(f"🎯 Synthesis:\n{final.content[0].text}")
-        return final.content[0].text
+        print(f"🎯 Synthesis:\n{first_text(final)}")
+        return first_text(final)
 
 class SocraticAgent:
     """Agent that learns through questioning"""
@@ -155,7 +154,7 @@ Ask a deep, probing question that challenges assumptions or explores implication
                 messages=[{"role": "user", "content": question_prompt}]
             )
             
-            question = q_response.content[0].text
+            question = first_text(q_response)
             print(f"Q{i+1}: {question}")
             
             # Answer the question
@@ -170,7 +169,7 @@ Provide a thoughtful answer:"""
                 messages=[{"role": "user", "content": answer_prompt}]
             )
             
-            answer = a_response.content[0].text
+            answer = first_text(a_response)
             print(f"A{i+1}: {answer}\n")
             
             current_understanding = f"{current_understanding}\n\nQ: {question}\nA: {answer}"
