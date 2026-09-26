@@ -1,5 +1,5 @@
-from agent import tools, tool_functions
-from config import api_call_with_retry, get_client
+from agent import tool_functions, tools
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -23,9 +23,7 @@ class Agent:
             )
 
             if response.stop_reason == "end_turn":
-                return next(
-                    (block.text for block in response.content if hasattr(block, "text")), ""
-                )
+                return first_text(response)
 
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
@@ -50,9 +48,7 @@ class Agent:
                 messages.append({"role": "user", "content": tool_results})
             else:
                 # Unexpected stop reason — return whatever text is available
-                return next(
-                    (block.text for block in response.content if hasattr(block, "text")), ""
-                )
+                return first_text(response)
 
         return "Max iterations reached. Could not complete the task."
 
