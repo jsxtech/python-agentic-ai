@@ -1,4 +1,4 @@
-from config import api_call_with_retry, first_text, get_client
+from config import api_call_with_retry, first_text, get_client, parse_score
 
 client = get_client()
 
@@ -28,14 +28,18 @@ class EvolutionaryAgent:
         for gen in range(1, generations + 1):
             print(f"\n--- Generation {gen} ---")
             
-            # Select best
+            # Select best (keep at least one survivor so the next generation
+            # is never empty, even for tiny population sizes).
             population.sort(key=lambda x: x["fitness"], reverse=True)
-            survivors = population[:population_size//2]
-            
+            num_survivors = max(1, population_size // 2)
+            survivors = population[:num_survivors]
+
             # Crossover and mutation
             new_population = survivors.copy()
-            
-            for i in range(len(survivors)):
+
+            # A single survivor cannot be crossed over with a distinct partner;
+            # skip crossover in that degenerate case.
+            for i in range(len(survivors) if len(survivors) > 1 else 0):
                 parent1 = survivors[i]["solution"]
                 parent2 = survivors[(i+1) % len(survivors)]["solution"]
                 
@@ -81,10 +85,7 @@ Respond with just a number:"""
             messages=[{"role": "user", "content": eval_prompt}]
         )
         
-        try:
-            return float(first_text(response).strip())
-        except (ValueError, TypeError):
-            return 5.0
+        return parse_score(first_text(response), default=5.0)
 
 class CuriosityDrivenAgent:
     """Agent that explores based on curiosity"""
