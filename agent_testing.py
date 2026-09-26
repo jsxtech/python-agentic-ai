@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from config import api_call_with_retry, first_text, get_client
 
@@ -65,7 +65,16 @@ class AgentBenchmark:
     def run_benchmark(self, name: str, agent_func, test_input: str, iterations: int = 5):
         """Run performance benchmark"""
         import time
-        
+
+        if iterations <= 0:
+            return {
+                "name": name,
+                "iterations": 0,
+                "avg_time": "0.00s",
+                "min_time": "0.00s",
+                "max_time": "0.00s",
+            }
+
         times = []
         for _ in range(iterations):
             start = time.time()
@@ -103,7 +112,7 @@ class AgentMonitor:
         }
         self._error_alerted = False
 
-    def log_error(self, error: str, context: Dict = None):
+    def log_error(self, error: str, context: Optional[Dict] = None):
         self.metrics["errors"].append({
             "error": error,
             "context": context,
@@ -187,18 +196,23 @@ class AgentABTest:
         self.variants[name] = agent_func
         self.results[name] = {"success": 0, "total": 0}
     
-    def run_test(self, input_data: str, variant: str = None):
+    def run_test(self, input_data: str, variant: Optional[str] = None):
         """Run test with specific or random variant"""
         import random
-        
+
+        if not self.variants:
+            return {"variant": None, "result": None, "error": "No variants registered"}
+
         if variant is None:
             variant = random.choice(list(self.variants.keys()))
-        
+        elif variant not in self.variants:
+            return {"variant": variant, "result": None, "error": f"Unknown variant '{variant}'"}
+
         agent_func = self.variants[variant]
         result = agent_func(input_data)
-        
+
         self.results[variant]["total"] += 1
-        
+
         return {"variant": variant, "result": result}
     
     def record_success(self, variant: str):
