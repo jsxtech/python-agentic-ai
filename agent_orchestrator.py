@@ -1,10 +1,9 @@
 """Agent Orchestrator — Auto-routing, validation, memory management, analytics, and chaining."""
 
-import json
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from config import api_call_with_retry, extract_json_object, get_client
+from config import api_call_with_retry, extract_json_object, first_text, get_client
 
 client = get_client()
 
@@ -47,7 +46,7 @@ Which agent is best suited for this query? Return JSON:
             messages=[{"role": "user", "content": prompt}]
         )
 
-        result = extract_json_object(response.content[0].text)
+        result = extract_json_object(first_text(response))
         if result is None:
             # Default to first agent
             agent_name = next(iter(self.agents))
@@ -98,7 +97,7 @@ Return JSON: {{"passed": true/false, "scores": {{"criterion": true/false}}, "fee
             messages=[{"role": "user", "content": prompt}]
         )
 
-        parsed = extract_json_object(result.content[0].text)
+        parsed = extract_json_object(first_text(result))
         if parsed is None:
             return {"passed": True, "scores": {}, "feedback": "Could not parse validation"}
 
@@ -106,11 +105,29 @@ Return JSON: {{"passed": true/false, "scores": {{"criterion": true/false}}, "fee
 
 
 class MemoryManager:
-    """Semantic memory with keyword indexing for efficient retrieval."""
+    """Semantic memory with keyword indexing for efficient retrieval.
 
-    def __init__(self):
+    Growth is bounded by ``max_entries``: once the cap is reached, the oldest
+    entry is evicted (FIFO) and its keyword-index references are pruned so the
+    index does not grow without limit in long-running processes.
+    """
+
+    def __init__(self, max_entries: int = 1000):
         self.memories = []
-        self.index = {}  # keyword -> list of memory indices
+        self.index = {}  # keyword -> list of memory ids
+        self.max_entries = max_entries
+
+    def _evict_oldest(self):
+        """Remove the oldest memory and prune it from the keyword index."""
+        oldest = self.memories.pop(0)
+        oldest_id = oldest["id"]
+        for kw in set(oldest["content"].lower().split()):
+            ids = self.index.get(kw)
+            if not ids:
+                continue
+            ids[:] = [i for i in ids if i != oldest_id]
+            if not ids:
+                del self.index[kw]
 
     def store(self, content: str, metadata: Optional[Dict] = None):
         """Store content with automatic keyword indexing."""
@@ -130,6 +147,10 @@ class MemoryManager:
                     self.index[kw] = []
                 self.index[kw].append(entry["id"])
 
+        # Enforce the bound after inserting.
+        while len(self.memories) > self.max_entries:
+            self._evict_oldest()
+
         return entry["id"]
 
     def search(self, query: str, limit: int = 5) -> List[Dict]:
@@ -144,7 +165,9 @@ class MemoryManager:
 
         # Sort by relevance score
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [self.memories[mem_id] for mem_id, _ in ranked[:limit]]
+        # ids may not equal list positions after eviction; look them up safely
+        by_id = {m["id"]: m for m in self.memories}
+        return [by_id[mem_id] for mem_id, _ in ranked if mem_id in by_id][:limit]
 
     def get_all(self) -> List[Dict]:
         """Return all stored memories."""
@@ -223,7 +246,7 @@ Input: {current_input}"""
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            output = response.content[0].text
+            output = first_text(response)
             results.append({
                 "step": step["name"],
                 "output": output
@@ -305,7 +328,7 @@ if __name__ == "__main__":
             max_tokens=512,
             messages=[{"role": "user", "content": f"Research this topic briefly: {query}"}]
         )
-        return response.content[0].text
+        return first_text(response)
 
     def code_handler(query):
         response = api_call_with_retry(
@@ -313,7 +336,7 @@ if __name__ == "__main__":
             max_tokens=512,
             messages=[{"role": "user", "content": f"Write code for: {query}"}]
         )
-        return response.content[0].text
+        return first_text(response)
 
     def analysis_handler(query):
         response = api_call_with_retry(
@@ -321,7 +344,7 @@ if __name__ == "__main__":
             max_tokens=512,
             messages=[{"role": "user", "content": f"Analyze: {query}"}]
         )
-        return response.content[0].text
+        return first_text(response)
 
     # Set up orchestrator
     orchestrator = AgentOrchestrator()
