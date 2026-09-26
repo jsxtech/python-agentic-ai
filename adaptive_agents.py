@@ -1,6 +1,4 @@
-from config import api_call_with_retry, get_client
-import json
-from datetime import datetime
+from config import api_call_with_retry, first_text, get_client
 
 client = get_client()
 
@@ -21,7 +19,7 @@ class EvolutionaryAgent:
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            solution = response.content[0].text
+            solution = first_text(response)
             fitness = self.evaluate_fitness(problem, solution)
             population.append({"solution": solution, "fitness": fitness, "generation": 0})
             print(f"Gen 0, Individual {i+1}: Fitness {fitness:.2f}")
@@ -53,7 +51,7 @@ Create a new solution by combining best elements from both parents and adding in
                     messages=[{"role": "user", "content": crossover_prompt}]
                 )
                 
-                offspring = response.content[0].text
+                offspring = first_text(response)
                 fitness = self.evaluate_fitness(problem, offspring)
                 new_population.append({"solution": offspring, "fitness": fitness, "generation": gen})
                 print(f"Gen {gen}, Offspring {i+1}: Fitness {fitness:.2f}")
@@ -84,8 +82,8 @@ Respond with just a number:"""
         )
         
         try:
-            return float(response.content[0].text.strip())
-        except:
+            return float(first_text(response).strip())
+        except (ValueError, TypeError):
             return 5.0
 
 class CuriosityDrivenAgent:
@@ -110,7 +108,7 @@ class CuriosityDrivenAgent:
                 messages=[{"role": "user", "content": learn_prompt}]
             )
             
-            knowledge = response.content[0].text
+            knowledge = first_text(response)
             self.knowledge.append({"topic": current_topic, "info": knowledge})
             print(f"Step {i+1}: {current_topic}")
             print(f"Learned: {knowledge}\n")
@@ -127,7 +125,7 @@ What's the most interesting related topic to explore next? Respond with just the
                 messages=[{"role": "user", "content": curiosity_prompt}]
             )
             
-            current_topic = next_response.content[0].text.strip()
+            current_topic = first_text(next_response).strip()
         
         print(f"📚 Explored {len(self.knowledge)} topics")
         return self.knowledge
@@ -162,7 +160,7 @@ Respond with just one word:"""
             messages=[{"role": "user", "content": context_prompt}]
         )
         
-        detected = response.content[0].text.strip().lower()
+        detected = first_text(response).strip().lower()
         return detected if detected in self.strategies else "analytical"
     
     def adapt_and_solve(self, task):
@@ -183,7 +181,7 @@ Solve this task using the specified strategy:"""
             messages=[{"role": "user", "content": prompt}]
         )
         
-        result = response.content[0].text
+        result = first_text(response)
         print(f"Result: {result}")
         
         return result
